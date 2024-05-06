@@ -4,5 +4,5 @@ faiss-cpu
 python-dotenv
 langchain
 PyPDF2
-chromadb
 langchain_google_genai
+chromadb
