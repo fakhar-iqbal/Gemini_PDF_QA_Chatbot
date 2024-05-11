@@ -6,3 +6,4 @@ langchain
 PyPDF2
 langchain_google_genai
 chromadb
+pdfminer.six

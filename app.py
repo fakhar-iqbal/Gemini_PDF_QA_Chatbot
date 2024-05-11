@@ -2,9 +2,9 @@ import streamlit as st
 from PyPDF2 import PdfReader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
-
+import PyPDF2
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
-
+import fitz
 import google.generativeai as genai
 
 from langchain.vectorstores import FAISS
@@ -18,32 +18,42 @@ load_dotenv()
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 
-### making a pdf reader methof
 
-def get_pdf_text(pdf_doc):
-    text=""
-    for pdf in pdf_doc:
-        print("reached")
-        pdf_reader = PdfReader(pdf)
-        print("exited")
-        for page in pdf_reader.pages:
-            text+= page.extract_text()
 
+import fitz
+import io
+
+def get_pdf_text(pdf_docs):
+    text = ""
+    for pdf in pdf_docs:
+        try:
+            # Read the content of the file object
+            pdf_content = pdf.read()
+            # Pass the content to fitz.open()
+            pdf_document = fitz.open(stream=io.BytesIO(pdf_content))
+            for page in pdf_document:
+                text += page.get_text()
+        except Exception as e:
+            print(f"Error processing PDF: {e}")
+            continue
     return text
+
+
+
 
 
 ## dividing the text into chunks
 
 def get_text_chunks(text):
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=10000,chunk_overlap=1000)
-    chunks  = text_splitter.split(text)
+    chunks  = text_splitter.split_text(text)
     return chunks
 
 #### convert the chunks to vectors now
 
 def get_vector_store(text_chunks):
-    embeddings  = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
-    vector_store = FAISS.from_texts(text_chunks,embedding=embeddings)
+    embeddings  = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    vector_store = FAISS.from_texts(text_chunks, embedding=embeddings)
     vector_store.save_local("faiss_index")
 
 
@@ -67,8 +77,8 @@ def get_conversational_chain():
     return chain
 
 def user_input(user_question):
-    embeddings = GoogleGenerativeAIEmbeddings(model="model/embedding-001")
-    new_db = FAISS.load_local("faiss_index",embeddings)
+    embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001")
+    new_db = FAISS.load_local("faiss_index", embeddings,allow_dangerous_deserialization=True)
     docs = new_db.similarity_search(user_question)
     chain = get_conversational_chain()
 
@@ -80,29 +90,33 @@ def user_input(user_question):
     print(response)
     st.write("Reply: ", response['output_text'])
 
+
+
 def main():
-    st.set_page_config("Chat with Multiple pdfs")
-    st.header("chat with multiple PDFs using Gemini")
 
-    user_question  = st.text_input("Ask a question from your pdf files")
+        st.set_page_config("Chat with Multiple pdfs")
 
-    if user_question:
-        user_input(user_question)
+        st.header("Chat with multiple PDFs using Gemini")
 
-    with st.sidebar:
-        st.title("Menu:")
-        pdf_docs = st.file_uploader("upload yur pdf file and click submit & process")
+        user_question = st.text_input("Ask a question from your pdf files")
 
-        if st.button("Submit & Process"):
-            with st.spinner("Processing..."):
-                raw_text = get_pdf_text(pdf_docs)
-                text_chunks = get_text_chunks(raw_text)
-                get_vector_store(text_chunks)
-                st.success("Done")
+        if user_question:
+            user_input(user_question)
+
+        with st.sidebar:
+            st.title("Menu:")
+            pdf_docs = st.file_uploader("Upload your PDF files", accept_multiple_files=True)
+
+            if st.button("Submit & Process") and pdf_docs:
+                with st.spinner("Processing..."):
+                    raw_text = get_pdf_text(pdf_docs)
+                    text_chunks = get_text_chunks(raw_text)
+                    get_vector_store(text_chunks)
+                    st.success("Done")
 
 
-
-if __name__=="__main__":
+if __name__ == "__main__":
     main()
+
 
 
